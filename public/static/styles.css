@@ -1,0 +1,306 @@
+/* AI Content Creator - Custom Styles */
+
+/* Cytoscape container styling */
+#workflow-canvas {
+  background: 
+    radial-gradient(circle at 1px 1px, rgba(0,0,0,0.05) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+/* Node styling for Cytoscape */
+.cy-node {
+  transition: all 0.3s ease;
+}
+
+.cy-node:hover {
+  transform: scale(1.05);
+}
+
+/* Node palette drag effects */
+.node-template {
+  transition: all 0.2s ease;
+}
+
+.node-template:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.node-template:active {
+  transform: scale(0.98);
+}
+
+/* Dragging state */
+.dragging {
+  opacity: 0.7;
+  transform: rotate(5deg);
+}
+
+/* Canvas drop zone */
+.drop-zone-active {
+  border: 3px dashed #3b82f6 !important;
+  background: rgba(59, 130, 246, 0.05) !important;
+}
+
+/* Properties panel animations */
+#properties-panel > div {
+  transition: all 0.3s ease;
+}
+
+/* Score bars for strategies */
+.score-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: #e5e7eb;
+  overflow: hidden;
+  position: relative;
+}
+
+.score-fill {
+  height: 100%;
+  transition: width 0.8s ease;
+  border-radius: 4px;
+}
+
+.score-fill.relevance { background: linear-gradient(90deg, #3b82f6, #1d4ed8); }
+.score-fill.likability { background: linear-gradient(90deg, #10b981, #047857); }
+.score-fill.shareability { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.score-fill.convertibility { background: linear-gradient(90deg, #ef4444, #dc2626); }
+
+/* Strategy cards */
+.strategy-card {
+  transition: all 0.3s ease;
+  border: 1px solid #e5e7eb;
+}
+
+.strategy-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.strategy-card.selected {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.02);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Form inputs styling */
+.input-group {
+  margin-bottom: 1rem;
+}
+
+.input-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.textarea-field {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #4b5563;
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+}
+
+/* Loading states */
+.loading {
+  opacity: 0.7;
+  pointer-events: none;
+  position: relative;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid #ffffff33;
+  border-top: 2px solid #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 0.75rem;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .w-80 { width: 20rem; }
+  .w-96 { width: 20rem; }
+}
+
+@media (max-width: 768px) {
+  .w-80 { width: 16rem; }
+  .w-96 { width: 100%; }
+  
+  .flex > .flex-1 {
+    min-width: 0;
+  }
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  padding: 1rem;
+  z-index: 1100;
+  animation: slideInFromRight 0.3s ease;
+  max-width: 400px;
+}
+
+.toast.success {
+  border-left: 4px solid #10b981;
+}
+
+.toast.error {
+  border-left: 4px solid #ef4444;
+}
+
+.toast.warning {
+  border-left: 4px solid #f59e0b;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Node connection styling */
+.cy-edge {
+  curve-style: bezier;
+  target-arrow-shape: triangle;
+  target-arrow-color: #6b7280;
+  line-color: #6b7280;
+  width: 2;
+}
+
+.cy-edge:hover {
+  line-color: #3b82f6;
+  target-arrow-color: #3b82f6;
+  width: 3;
+}
+
+.cy-edge.selected {
+  line-color: #ef4444;
+  target-arrow-color: #ef4444;
+  width: 3;
+}
