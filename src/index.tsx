@@ -475,6 +475,192 @@ Create compelling, actionable content that follows the outlined strategy. Make i
   }
 })
 
+// Generate AI image for content
+app.post('/api/generate-image', async (c) => {
+  const { AI, DB } = c.env
+  const { strategy_id, image_prompt, style = 'professional' } = await c.req.json()
+  
+  try {
+    // Get strategy context for better image generation
+    const strategyResult = await DB.prepare(`
+      SELECT cs.*, bp.* FROM content_strategies cs
+      JOIN workflows w ON cs.workflow_id = w.id
+      JOIN business_parameters bp ON w.id = bp.workflow_id
+      WHERE cs.id = ?
+    `).bind(strategy_id).first()
+    
+    // Enhanced prompt with business context
+    const enhancedPrompt = `${image_prompt}. ${style} style. Related to ${strategyResult?.business_background || 'business'} in ${strategyResult?.industry || 'technology'} industry. High quality, professional, suitable for ${strategyResult?.content_format || 'social media'}`
+    
+    // Use Cloudflare Workers AI for image generation
+    const imageResponse = await AI.run('@cf/stabilityai/stable-diffusion-xl-base-1.0', {
+      prompt: enhancedPrompt,
+      num_steps: 20,
+      guidance_scale: 7.5
+    })
+    
+    // Convert ArrayBuffer to base64 for storage
+    const imageBuffer = imageResponse
+    const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)))
+    
+    // Save image metadata to database
+    const result = await DB.prepare(`
+      INSERT INTO content_assets (content_id, asset_type, file_path, file_name, mime_type)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(
+      null, // content_id can be null for standalone images
+      'image',
+      `data:image/png;base64,${base64Image}`,
+      `generated-image-${Date.now()}.png`,
+      'image/png'
+    ).run()
+    
+    return c.json({
+      id: result.meta.last_row_id,
+      image_url: `data:image/png;base64,${base64Image}`,
+      prompt: enhancedPrompt,
+      style: style
+    })
+    
+  } catch (error) {
+    return c.json({ error: 'Failed to generate image: ' + error.message }, 500)
+  }
+})
+
+// Refine existing content
+app.post('/api/refine-content', async (c) => {
+  const { AI, DB } = c.env
+  const { content_id, refinement_instructions, content_text } = await c.req.json()
+  
+  try {
+    const refinementPrompt = `Refine and improve this content based on the following instructions:
+
+Original Content:
+${content_text}
+
+Refinement Instructions:
+${refinement_instructions}
+
+Please provide an improved version that:
+1. Maintains the core message and intent
+2. Improves readability and engagement
+3. Incorporates the specific refinement requests
+4. Keeps the same general length and format
+
+Refined Content:`
+
+    const response = await AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      prompt: refinementPrompt,
+      max_tokens: 1000
+    })
+    
+    // Update content in database
+    await DB.prepare(`
+      UPDATE generated_content 
+      SET content_data = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).bind(response.response, content_id).run()
+    
+    return c.json({
+      refined_content: response.response,
+      refinement_applied: refinement_instructions
+    })
+    
+  } catch (error) {
+    return c.json({ error: 'Failed to refine content: ' + error.message }, 500)
+  }
+})
+
+// Export content in various formats
+app.post('/api/export-content', async (c) => {
+  const { content_id, export_format, platform_settings } = await c.req.json()
+  const { DB } = c.env
+  
+  try {
+    // Get content details
+    const contentResult = await DB.prepare(`
+      SELECT gc.*, cs.title as strategy_title 
+      FROM generated_content gc
+      LEFT JOIN content_strategies cs ON gc.strategy_id = cs.id
+      WHERE gc.id = ?
+    `).bind(content_id).first()
+    
+    if (!contentResult) {
+      return c.json({ error: 'Content not found' }, 404)
+    }
+    
+    let exportedContent = contentResult.content_data
+    let metadata = {
+      original_length: exportedContent.length,
+      export_format: export_format,
+      exported_at: new Date().toISOString()
+    }
+    
+    // Platform-specific formatting
+    switch (export_format) {
+      case 'linkedin':
+        // LinkedIn optimization
+        if (exportedContent.length > 3000) {
+          exportedContent = exportedContent.substring(0, 2950) + '...'
+        }
+        metadata.character_count = exportedContent.length
+        metadata.platform = 'LinkedIn'
+        break
+        
+      case 'twitter':
+        // Twitter thread handling
+        if (exportedContent.length > 280) {
+          const chunks = []
+          let currentChunk = ''
+          const sentences = exportedContent.split('. ')
+          
+          for (let sentence of sentences) {
+            if ((currentChunk + sentence).length <= 250) {
+              currentChunk += (currentChunk ? '. ' : '') + sentence
+            } else {
+              if (currentChunk) chunks.push(currentChunk)
+              currentChunk = sentence
+            }
+          }
+          if (currentChunk) chunks.push(currentChunk)
+          
+          exportedContent = chunks.map((chunk, i) => `${i + 1}/${chunks.length} ${chunk}`).join('\n\n---\n\n')
+          metadata.thread_count = chunks.length
+        }
+        metadata.platform = 'Twitter'
+        break
+        
+      case 'instagram':
+        // Instagram caption with hashtags
+        exportedContent += '\n\n' + (platform_settings?.hashtags || '#business #content #ai #marketing')
+        metadata.platform = 'Instagram'
+        break
+        
+      case 'blog':
+        // Blog post formatting with title and sections
+        exportedContent = `# ${contentResult.strategy_title || 'Blog Post'}\n\n${exportedContent}`
+        metadata.platform = 'Blog/Website'
+        break
+        
+      case 'email':
+        // Email format with subject line
+        const subject = platform_settings?.subject || `${contentResult.strategy_title || 'Newsletter'}`
+        exportedContent = `Subject: ${subject}\n\n${exportedContent}`
+        metadata.platform = 'Email'
+        break
+    }
+    
+    return c.json({
+      exported_content: exportedContent,
+      metadata: metadata,
+      download_filename: `content-${export_format}-${Date.now()}.txt`
+    })
+    
+  } catch (error) {
+    return c.json({ error: 'Failed to export content: ' + error.message }, 500)
+  }
+})
+
 // Get workflow with all related data
 app.get('/api/workflows/:id', async (c) => {
   const { DB } = c.env

@@ -454,6 +454,36 @@ class ContentWorkflowApp {
             <option value="long" ${config.length === 'long' ? 'selected' : ''}>Long (800+ words)</option>
           </select>
         </div>
+      `,
+      image_generator: `
+        <div class="input-group">
+          <label class="input-label">Image Style</label>
+          <select class="input-field" name="image_style">
+            <option value="">Select style</option>
+            <option value="professional" ${config.image_style === 'professional' ? 'selected' : ''}>Professional</option>
+            <option value="creative" ${config.image_style === 'creative' ? 'selected' : ''}>Creative</option>
+            <option value="minimalist" ${config.image_style === 'minimalist' ? 'selected' : ''}>Minimalist</option>
+            <option value="colorful" ${config.image_style === 'colorful' ? 'selected' : ''}>Colorful</option>
+            <option value="corporate" ${config.image_style === 'corporate' ? 'selected' : ''}>Corporate</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Image Description</label>
+          <textarea class="input-field textarea-field" name="image_prompt" placeholder="Describe the image you want to generate...">${config.image_prompt || ''}</textarea>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Dimensions</label>
+          <select class="input-field" name="dimensions">
+            <option value="square" ${config.dimensions === 'square' ? 'selected' : ''}>Square (1:1)</option>
+            <option value="landscape" ${config.dimensions === 'landscape' ? 'selected' : ''}>Landscape (16:9)</option>
+            <option value="portrait" ${config.dimensions === 'portrait' ? 'selected' : ''}>Portrait (9:16)</option>
+          </select>
+        </div>
+        <div class="mt-4">
+          <button type="button" class="btn btn-success w-full" onclick="app.generateImageFromNode()">
+            <i class="fas fa-image mr-2"></i>Generate Image Now
+          </button>
+        </div>
       `
     };
 
@@ -740,13 +770,516 @@ class ContentWorkflowApp {
   }
 
   refineContent(content) {
-    // TODO: Implement content refinement
-    this.showToast('Content refinement feature coming soon!', 'warning');
+    this.showRefinementModal(content);
   }
 
   exportContent(content) {
-    // TODO: Implement content export
-    this.showToast('Content export feature coming soon!', 'warning');
+    this.showExportModal(content);
+  }
+
+  showRefinementModal(content) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content bg-white rounded-lg shadow-xl max-w-2xl w-full">
+        <div class="flex items-center justify-between p-6 border-b">
+          <h3 class="text-xl font-semibold text-gray-900">
+            <i class="fas fa-edit mr-2"></i>Refine Content
+          </h3>
+          <button onclick="app.closeModal(this)" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        
+        <div class="p-6">
+          <div class="input-group mb-4">
+            <label class="input-label">Refinement Instructions</label>
+            <textarea id="refinement-instructions" class="input-field textarea-field" rows="3" placeholder="e.g., Make it more professional, add more call-to-actions, shorten the content..."></textarea>
+          </div>
+          
+          <div class="input-group mb-6">
+            <label class="input-label">Current Content</label>
+            <textarea id="original-content" class="input-field textarea-field" rows="8" readonly>${content}</textarea>
+          </div>
+          
+          <div class="flex space-x-3">
+            <button class="btn btn-primary flex-1" onclick="app.processRefinement('${content.replace(/'/g, "\\'")}')">
+              <i class="fas fa-magic mr-2"></i>Refine Content
+            </button>
+            <button class="btn btn-secondary" onclick="app.closeModal(this)">
+              <i class="fas fa-times mr-2"></i>Cancel
+            </button>
+          </div>
+          
+          <div id="refined-result" class="hidden mt-6">
+            <label class="input-label">Refined Content</label>
+            <textarea id="refined-content" class="input-field textarea-field" rows="8" readonly></textarea>
+            <div class="flex space-x-2 mt-3">
+              <button class="btn btn-success" onclick="app.copyRefinedContent()">
+                <i class="fas fa-copy mr-2"></i>Copy Refined
+              </button>
+              <button class="btn btn-primary" onclick="app.exportRefinedContent()">
+                <i class="fas fa-download mr-2"></i>Export
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById('modal-container').appendChild(modal);
+  }
+
+  async processRefinement(originalContent) {
+    const instructions = document.getElementById('refinement-instructions').value.trim();
+    
+    if (!instructions) {
+      this.showToast('Please enter refinement instructions', 'error');
+      return;
+    }
+    
+    const button = event.target;
+    button.classList.add('loading');
+    button.disabled = true;
+    
+    try {
+      const response = await axios.post('/api/refine-content', {
+        content_id: 1, // Default for demo
+        refinement_instructions: instructions,
+        content_text: originalContent
+      });
+      
+      const resultDiv = document.getElementById('refined-result');
+      const refinedTextarea = document.getElementById('refined-content');
+      
+      refinedTextarea.value = response.data.refined_content;
+      resultDiv.classList.remove('hidden');
+      
+      this.showToast('Content refined successfully!', 'success');
+      
+    } catch (error) {
+      this.showToast('Failed to refine content: ' + (error.response?.data?.error || error.message), 'error');
+    } finally {
+      button.classList.remove('loading');
+      button.disabled = false;
+    }
+  }
+
+  copyRefinedContent() {
+    const refinedContent = document.getElementById('refined-content').value;
+    navigator.clipboard.writeText(refinedContent).then(() => {
+      this.showToast('Refined content copied to clipboard!', 'success');
+    }).catch(() => {
+      this.showToast('Failed to copy refined content', 'error');
+    });
+  }
+
+  exportRefinedContent() {
+    const refinedContent = document.getElementById('refined-content').value;
+    this.showExportModal(refinedContent);
+  }
+
+  showExportModal(content) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content bg-white rounded-lg shadow-xl max-w-2xl w-full">
+        <div class="flex items-center justify-between p-6 border-b">
+          <h3 class="text-xl font-semibold text-gray-900">
+            <i class="fas fa-download mr-2"></i>Export Content
+          </h3>
+          <button onclick="app.closeModal(this)" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        
+        <div class="p-6">
+          <div class="input-group mb-4">
+            <label class="input-label">Export Platform</label>
+            <select id="export-platform" class="input-field" onchange="app.updateExportSettings()">
+              <option value="">Select platform</option>
+              <option value="linkedin">LinkedIn Post</option>
+              <option value="twitter">Twitter Thread</option>
+              <option value="instagram">Instagram Caption</option>
+              <option value="facebook">Facebook Post</option>
+              <option value="blog">Blog Post</option>
+              <option value="email">Email Newsletter</option>
+              <option value="txt">Plain Text File</option>
+              <option value="pdf">PDF Document</option>
+            </select>
+          </div>
+          
+          <div id="platform-settings" class="hidden mb-4">
+            <!-- Dynamic platform settings will be inserted here -->
+          </div>
+          
+          <div class="input-group mb-6">
+            <label class="input-label">Content Preview</label>
+            <textarea id="export-preview" class="input-field textarea-field" rows="6" readonly>${content}</textarea>
+          </div>
+          
+          <div class="flex space-x-3">
+            <button class="btn btn-primary flex-1" onclick="app.processExport('${content.replace(/'/g, "\\'")}')">
+              <i class="fas fa-download mr-2"></i>Export Content
+            </button>
+            <button class="btn btn-success" onclick="app.generateImage('${content.replace(/'/g, "\\'")}')">
+              <i class="fas fa-image mr-2"></i>Generate Image
+            </button>
+            <button class="btn btn-secondary" onclick="app.closeModal(this)">
+              <i class="fas fa-times mr-2"></i>Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById('modal-container').appendChild(modal);
+  }
+
+  updateExportSettings() {
+    const platform = document.getElementById('export-platform').value;
+    const settingsDiv = document.getElementById('platform-settings');
+    
+    let settingsHtml = '';
+    
+    switch (platform) {
+      case 'linkedin':
+        settingsHtml = `
+          <label class="input-label">LinkedIn Settings</label>
+          <div class="bg-blue-50 p-3 rounded">
+            <p class="text-sm text-blue-700">✓ Optimized for LinkedIn's 3000 character limit</p>
+            <p class="text-sm text-blue-700">✓ Professional formatting applied</p>
+          </div>
+        `;
+        break;
+        
+      case 'twitter':
+        settingsHtml = `
+          <label class="input-label">Twitter Settings</label>
+          <div class="bg-blue-50 p-3 rounded">
+            <p class="text-sm text-blue-700">✓ Automatically split into thread if needed</p>
+            <p class="text-sm text-blue-700">✓ 280 character limit per tweet</p>
+          </div>
+        `;
+        break;
+        
+      case 'instagram':
+        settingsHtml = `
+          <label class="input-label">Instagram Settings</label>
+          <input type="text" id="instagram-hashtags" class="input-field mt-2" placeholder="Custom hashtags (optional)" value="#business #content #ai #marketing">
+          <div class="bg-pink-50 p-3 rounded mt-2">
+            <p class="text-sm text-pink-700">✓ Hashtags will be added automatically</p>
+            <p class="text-sm text-pink-700">✓ Caption optimized for engagement</p>
+          </div>
+        `;
+        break;
+        
+      case 'email':
+        settingsHtml = `
+          <label class="input-label">Email Settings</label>
+          <input type="text" id="email-subject" class="input-field mt-2" placeholder="Email subject line">
+          <div class="bg-green-50 p-3 rounded mt-2">
+            <p class="text-sm text-green-700">✓ Subject line will be added</p>
+            <p class="text-sm text-green-700">✓ Email formatting applied</p>
+          </div>
+        `;
+        break;
+        
+      case 'blog':
+        settingsHtml = `
+          <label class="input-label">Blog Settings</label>
+          <div class="bg-purple-50 p-3 rounded">
+            <p class="text-sm text-purple-700">✓ Title and sections formatting</p>
+            <p class="text-sm text-purple-700">✓ SEO-friendly structure</p>
+          </div>
+        `;
+        break;
+    }
+    
+    if (settingsHtml) {
+      settingsDiv.innerHTML = settingsHtml;
+      settingsDiv.classList.remove('hidden');
+    } else {
+      settingsDiv.classList.add('hidden');
+    }
+  }
+
+  async processExport(content) {
+    const platform = document.getElementById('export-platform').value;
+    
+    if (!platform) {
+      this.showToast('Please select an export platform', 'error');
+      return;
+    }
+    
+    const button = event.target;
+    button.classList.add('loading');
+    button.disabled = true;
+    
+    try {
+      let platformSettings = {};
+      
+      // Collect platform-specific settings
+      if (platform === 'instagram') {
+        const hashtags = document.getElementById('instagram-hashtags')?.value;
+        if (hashtags) platformSettings.hashtags = hashtags;
+      } else if (platform === 'email') {
+        const subject = document.getElementById('email-subject')?.value;
+        if (subject) platformSettings.subject = subject;
+      }
+      
+      const response = await axios.post('/api/export-content', {
+        content_id: 1, // Default for demo
+        export_format: platform,
+        platform_settings: platformSettings
+      });
+      
+      // Create download
+      if (platform === 'pdf') {
+        this.generatePDF(response.data.exported_content, response.data.download_filename);
+      } else {
+        this.downloadText(response.data.exported_content, response.data.download_filename);
+      }
+      
+      this.showToast(`Content exported for ${response.data.metadata.platform}!`, 'success');
+      
+    } catch (error) {
+      this.showToast('Failed to export content: ' + (error.response?.data?.error || error.message), 'error');
+    } finally {
+      button.classList.remove('loading');
+      button.disabled = false;
+    }
+  }
+
+  async generateImage(content) {
+    const button = event.target;
+    button.classList.add('loading');
+    button.disabled = true;
+    
+    // Show image prompt modal
+    const promptModal = document.createElement('div');
+    promptModal.className = 'modal-overlay';
+    promptModal.innerHTML = `
+      <div class="modal-content bg-white rounded-lg shadow-xl max-w-lg w-full">
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-image mr-2"></i>Generate AI Image
+          </h3>
+          
+          <div class="input-group mb-4">
+            <label class="input-label">Image Description</label>
+            <textarea id="image-prompt" class="input-field textarea-field" rows="3" placeholder="Describe the image you want to generate..."></textarea>
+          </div>
+          
+          <div class="input-group mb-4">
+            <label class="input-label">Style</label>
+            <select id="image-style" class="input-field">
+              <option value="professional">Professional</option>
+              <option value="creative">Creative</option>
+              <option value="minimalist">Minimalist</option>
+              <option value="colorful">Colorful</option>
+              <option value="corporate">Corporate</option>
+            </select>
+          </div>
+          
+          <div class="flex space-x-3">
+            <button class="btn btn-primary flex-1" onclick="app.processImageGeneration()">
+              <i class="fas fa-magic mr-2"></i>Generate Image
+            </button>
+            <button class="btn btn-secondary" onclick="app.closeModal(this)">
+              <i class="fas fa-times mr-2"></i>Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById('modal-container').appendChild(promptModal);
+    
+    button.classList.remove('loading');
+    button.disabled = false;
+  }
+
+  async processImageGeneration() {
+    const imagePrompt = document.getElementById('image-prompt').value.trim();
+    const imageStyle = document.getElementById('image-style').value;
+    
+    if (!imagePrompt) {
+      this.showToast('Please describe the image you want to generate', 'error');
+      return;
+    }
+    
+    const button = event.target;
+    button.classList.add('loading');
+    button.disabled = true;
+    
+    try {
+      const response = await axios.post('/api/generate-image', {
+        strategy_id: 1, // Default for demo
+        image_prompt: imagePrompt,
+        style: imageStyle
+      });
+      
+      // Show generated image
+      const imageModal = document.createElement('div');
+      imageModal.className = 'modal-overlay';
+      imageModal.innerHTML = `
+        <div class="modal-content bg-white rounded-lg shadow-xl max-w-2xl w-full">
+          <div class="p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+              <i class="fas fa-image mr-2"></i>Generated Image
+            </h3>
+            
+            <div class="mb-4">
+              <img src="${response.data.image_url}" alt="Generated Image" class="w-full rounded-lg shadow-lg">
+            </div>
+            
+            <div class="bg-gray-50 p-3 rounded mb-4">
+              <p class="text-sm text-gray-700"><strong>Prompt:</strong> ${response.data.prompt}</p>
+              <p class="text-sm text-gray-700"><strong>Style:</strong> ${response.data.style}</p>
+            </div>
+            
+            <div class="flex space-x-3">
+              <button class="btn btn-primary flex-1" onclick="app.downloadImage('${response.data.image_url}', 'generated-image.png')">
+                <i class="fas fa-download mr-2"></i>Download Image
+              </button>
+              <button class="btn btn-secondary" onclick="app.closeModal(this)">
+                <i class="fas fa-times mr-2"></i>Close
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Close the prompt modal first
+      document.querySelectorAll('.modal-overlay').forEach(modal => modal.remove());
+      
+      // Show the image modal
+      document.getElementById('modal-container').appendChild(imageModal);
+      
+      this.showToast('Image generated successfully!', 'success');
+      
+    } catch (error) {
+      this.showToast('Failed to generate image: ' + (error.response?.data?.error || error.message), 'error');
+    } finally {
+      button.classList.remove('loading');
+      button.disabled = false;
+    }
+  }
+
+  downloadText(content, filename) {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  downloadImage(imageUrl, filename) {
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = filename;
+    a.click();
+  }
+
+  generatePDF(content, filename) {
+    // Simple PDF generation - in production, use a proper PDF library
+    this.downloadText(content, filename.replace('.pdf', '.txt'));
+    this.showToast('PDF generation requires additional libraries. Downloaded as text file instead.', 'warning');
+  }
+
+  async generateImageFromNode() {
+    if (!this.selectedNode || this.selectedNode.data('type') !== 'image_generator') {
+      this.showToast('Please select an Image Generator node', 'error');
+      return;
+    }
+
+    const config = this.selectedNode.data('config') || {};
+    const imagePrompt = config.image_prompt;
+    const imageStyle = config.image_style || 'professional';
+
+    if (!imagePrompt) {
+      this.showToast('Please enter an image description in the node configuration', 'error');
+      return;
+    }
+
+    const button = event.target;
+    button.classList.add('loading');
+    button.disabled = true;
+
+    try {
+      const response = await axios.post('/api/generate-image', {
+        strategy_id: 1, // Default for demo
+        image_prompt: imagePrompt,
+        style: imageStyle
+      });
+
+      // Show generated image in modal
+      const imageModal = document.createElement('div');
+      imageModal.className = 'modal-overlay';
+      imageModal.innerHTML = `
+        <div class="modal-content bg-white rounded-lg shadow-xl max-w-2xl w-full">
+          <div class="p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">
+              <i class="fas fa-image mr-2"></i>Generated Image
+            </h3>
+            
+            <div class="mb-4">
+              <img src="${response.data.image_url}" alt="Generated Image" class="w-full rounded-lg shadow-lg">
+            </div>
+            
+            <div class="bg-gray-50 p-3 rounded mb-4">
+              <p class="text-sm text-gray-700"><strong>Prompt:</strong> ${response.data.prompt}</p>
+              <p class="text-sm text-gray-700"><strong>Style:</strong> ${response.data.style}</p>
+            </div>
+            
+            <div class="flex space-x-3">
+              <button class="btn btn-primary flex-1" onclick="app.downloadImage('${response.data.image_url}', 'generated-image-${Date.now()}.png')">
+                <i class="fas fa-download mr-2"></i>Download Image
+              </button>
+              <button class="btn btn-success" onclick="app.addImageToWorkflow('${response.data.image_url}', '${imagePrompt}')">
+                <i class="fas fa-plus mr-2"></i>Add to Workflow
+              </button>
+              <button class="btn btn-secondary" onclick="app.closeModal(this)">
+                <i class="fas fa-times mr-2"></i>Close
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.getElementById('modal-container').appendChild(imageModal);
+      this.showToast('Image generated successfully!', 'success');
+
+    } catch (error) {
+      this.showToast('Failed to generate image: ' + (error.response?.data?.error || error.message), 'error');
+    } finally {
+      button.classList.remove('loading');
+      button.disabled = false;
+    }
+  }
+
+  addImageToWorkflow(imageUrl, prompt) {
+    // Store the generated image reference in the node
+    if (this.selectedNode) {
+      const currentConfig = this.selectedNode.data('config') || {};
+      currentConfig.generated_image_url = imageUrl;
+      currentConfig.generated_prompt = prompt;
+      this.selectedNode.data('config', currentConfig);
+      
+      // Update node visual to show it has generated content
+      this.selectedNode.style({
+        'border-color': '#10b981',
+        'border-width': 3
+      });
+      
+      this.showToast('Image added to workflow node!', 'success');
+    }
+    
+    // Close the modal
+    document.querySelectorAll('.modal-overlay').forEach(modal => modal.remove());
   }
 
   async saveWorkflow() {
