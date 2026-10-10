@@ -6,18 +6,26 @@
 - **Features**: Visual workflow builder, AI-powered strategy generation, real-time scoring, content refinement, and multi-platform export capabilities
 
 ## URLs
-- **Development**: https://3000-imkezhn46s5j0eioldwfw-6532622b.e2b.dev
-- **GitHub**: Ready for repository setup
+- **Development**: https://3000-imkezhn46s5j0eioldwfw.e2b.dev
+- **GitHub Repository**: https://github.com/JustinAIHK/GenSpark-AIContentGen
 - **Production**: Ready for Cloudflare Pages deployment
 
 ## ✨ Currently Completed Features
 
 ### 🎯 Core Functionality
-- **Node-Based Workflow Builder**: Drag-and-drop interface for creating content strategies
+- **Node-Based Workflow Builder**: Drag-and-drop interface for creating content strategies ✅ **FIXED**
 - **AI-Powered Strategy Generation**: Real-time content strategy creation using Cloudflare Workers AI
 - **Advanced Scoring System**: 4-metric evaluation (Relevance, Likability, Shareability, Convertibility)
 - **Dynamic Content Generation**: Instant content creation from selected strategies
 - **Real-Time Node Configuration**: Interactive parameter adjustment with live updates
+
+### 🔗 Node Connectivity System ✅ **NEW**
+- **Right-Click Connection Mode**: Right-click any node to start connection mode
+- **Visual Connection Preview**: Dashed line preview during connection creation
+- **Connection Validation**: Smart validation ensures only compatible nodes can connect
+- **Connection Properties**: Click connections to view source/target details and delete
+- **Workflow Validation**: Automatic validation of workflow structure before execution
+- **Connected Parameter Flow**: AI generation uses only connected node parameters
 
 ### 📊 Business Parameter Nodes
 - **Business Background**: Company info, industry, and context configuration
@@ -117,16 +125,24 @@
 ## 👥 User Guide
 
 ### Getting Started
-1. **Access the Platform**: Open the application URL in your browser
+1. **Access the Platform**: Open https://3000-imkezhn46s5j0eioldwfw.e2b.dev in your browser
 2. **Create New Project**: Click "New Project" and provide project details
-3. **Build Your Workflow**: Drag nodes from the left palette to the canvas
+3. **Build Your Workflow**: Drag nodes from the left palette to the canvas ✅ **FIXED**
+
+### Creating Node Connections ✅ **NEW FEATURE**
+1. **Start Connection Mode**: Right-click on any node to enter connection mode
+2. **Create Connection**: Click on another compatible node to create a connection
+3. **View Connections**: Click on any connection line to view properties or delete
+4. **Cancel Connection**: Click on empty canvas area to exit connection mode
+5. **Connection Rules**: Only compatible node types can be connected (input → processing → output)
 
 ### Creating Content Strategies
 1. **Add Input Nodes**: Start with Business Background and Target Audience nodes
-2. **Configure Parameters**: Click on each node to fill in detailed information
-3. **Add Strategy Generator**: Drag the Strategy Generator node to process inputs
-4. **Run Workflow**: Click "Run Workflow" to generate AI-powered strategies
-5. **Review Scores**: Analyze the 4-metric scoring system (Relevance, Likability, Shareability, Convertibility)
+2. **Connect Nodes**: Right-click nodes and connect them to Strategy Generator ✅ **REQUIRED**
+3. **Configure Parameters**: Click on each node to fill in detailed information
+4. **Add Processing Nodes**: Add Strategy Generator and connect input nodes to it
+5. **Run Workflow**: Click "Run Workflow" to generate AI-powered strategies (validates connections)
+6. **Review Scores**: Analyze the 4-metric scoring system (Relevance, Likability, Shareability, Convertibility)
 
 ### Generating Content
 1. **Select Strategy**: Choose your preferred strategy from the generated options
