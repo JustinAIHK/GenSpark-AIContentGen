@@ -191,6 +191,20 @@ app.get('/', (c) => {
                 <div class="flex-1 relative bg-gray-100">
                     <div id="workflow-canvas" class="w-full h-full"></div>
                     
+                    <!-- Connection Instructions -->
+                    <div class="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-4 max-w-sm">
+                        <h4 class="text-sm font-semibold text-gray-800 mb-2">
+                            <i class="fas fa-info-circle text-blue-500 mr-2"></i>How to Connect Nodes
+                        </h4>
+                        <ul class="text-xs text-gray-600 space-y-1">
+                            <li>• <strong>Right-click</strong> a node to start connection mode</li>
+                            <li>• <strong>Click</strong> another node to create connection</li>
+                            <li>• <strong>Double-click</strong> for quick connection mode</li>
+                            <li>• <strong>Click canvas</strong> to cancel connection</li>
+                            <li>• <strong>Click edge</strong> to view/delete connection</li>
+                        </ul>
+                    </div>
+                    
                     <!-- Welcome Message -->
                     <div id="welcome-message" class="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div class="text-center">

@@ -40,7 +40,8 @@ class ContentWorkflowApp {
             'border-width': 2,
             'border-color': 'data(borderColor)',
             'text-wrap': 'wrap',
-            'text-max-width': 100
+            'text-max-width': 100,
+            'cursor': 'pointer'
           }
         },
         {
@@ -52,6 +53,14 @@ class ContentWorkflowApp {
           }
         },
         {
+          selector: 'node.connecting',
+          style: {
+            'border-color': '#f59e0b',
+            'border-width': 4,
+            'box-shadow': '0 0 15px rgba(245, 158, 11, 0.7)'
+          }
+        },
+        {
           selector: 'edge',
           style: {
             'width': 3,
@@ -59,7 +68,9 @@ class ContentWorkflowApp {
             'target-arrow-color': '#6b7280',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
-            'arrow-scale': 1.2
+            'arrow-scale': 1.2,
+            'source-endpoint': 'outside-to-node',
+            'target-endpoint': 'outside-to-node'
           }
         },
         {
@@ -68,6 +79,15 @@ class ContentWorkflowApp {
             'line-color': '#ef4444',
             'target-arrow-color': '#ef4444',
             'width': 4
+          }
+        },
+        {
+          selector: 'edge.preview',
+          style: {
+            'line-color': '#f59e0b',
+            'target-arrow-color': '#f59e0b',
+            'width': 2,
+            'line-style': 'dashed'
           }
         }
       ],
@@ -79,27 +99,62 @@ class ContentWorkflowApp {
       // Interaction options
       userZoomingEnabled: true,
       userPanningEnabled: true,
-      boxSelectionEnabled: true
+      boxSelectionEnabled: true,
+      minZoom: 0.3,
+      maxZoom: 2
     });
 
     // Node click handler
     this.cy.on('tap', 'node', (evt) => {
       const node = evt.target;
-      this.selectNode(node);
+      
+      if (this.connectionMode && this.sourceNode) {
+        // Create connection
+        this.createConnection(this.sourceNode, node);
+      } else {
+        // Select node normally
+        this.selectNode(node);
+      }
     });
 
     // Canvas click handler (deselect)
     this.cy.on('tap', (evt) => {
       if (evt.target === this.cy) {
         this.deselectNode();
+        this.exitConnectionMode();
       }
     });
 
-    // Edge creation on node connection
+    // Right-click to start connection mode
     this.cy.on('cxttap', 'node', (evt) => {
+      evt.preventDefault();
       const node = evt.target;
-      this.startConnection(node);
+      this.startConnectionMode(node);
     });
+
+    // Double-click to quick connect
+    this.cy.on('dbltap', 'node', (evt) => {
+      const node = evt.target;
+      this.startConnectionMode(node);
+    });
+
+    // Edge selection
+    this.cy.on('tap', 'edge', (evt) => {
+      const edge = evt.target;
+      this.selectEdge(edge);
+    });
+
+    // Mouse move for connection preview
+    this.cy.on('mousemove', (evt) => {
+      if (this.connectionMode && this.sourceNode) {
+        this.updateConnectionPreview(evt.position);
+      }
+    });
+
+    // Initialize connection state
+    this.connectionMode = false;
+    this.sourceNode = null;
+    this.previewEdge = null;
   }
 
   initEventListeners() {
@@ -137,24 +192,35 @@ class ContentWorkflowApp {
     const canvas = document.getElementById('workflow-canvas');
     const templates = document.querySelectorAll('.node-template');
 
+    // Make node templates draggable
     templates.forEach(template => {
+      template.draggable = true;
+      
       template.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', template.dataset.nodeType);
+        e.dataTransfer.effectAllowed = 'copy';
         template.classList.add('dragging');
       });
 
-      template.addEventListener('dragend', () => {
+      template.addEventListener('dragend', (e) => {
         template.classList.remove('dragging');
       });
     });
 
+    // Canvas drop zone handlers
     canvas.addEventListener('dragover', (e) => {
       e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
       canvas.classList.add('drop-zone-active');
     });
 
-    canvas.addEventListener('dragleave', () => {
-      canvas.classList.remove('drop-zone-active');
+    canvas.addEventListener('dragleave', (e) => {
+      // Only remove if we're leaving the canvas entirely, not just moving between child elements
+      const rect = canvas.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || 
+          e.clientY < rect.top || e.clientY > rect.bottom) {
+        canvas.classList.remove('drop-zone-active');
+      }
     });
 
     canvas.addEventListener('drop', (e) => {
@@ -162,25 +228,31 @@ class ContentWorkflowApp {
       canvas.classList.remove('drop-zone-active');
       
       const nodeType = e.dataTransfer.getData('text/plain');
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      if (!nodeType) return;
+      
+      // Get canvas position and convert to Cytoscape coordinates
+      const canvasRect = canvas.getBoundingClientRect();
+      const canvasCenter = this.cy.pan();
+      const zoom = this.cy.zoom();
+      
+      // Calculate position relative to Cytoscape viewport
+      const x = (e.clientX - canvasRect.left - canvasRect.width / 2 - canvasCenter.x) / zoom;
+      const y = (e.clientY - canvasRect.top - canvasRect.height / 2 - canvasCenter.y) / zoom;
       
       this.addNode(nodeType, { x, y });
       this.hideWelcomeMessage();
     });
+
+    // Initialize connection mode variables
+    this.connectionMode = false;
+    this.sourceNode = null;
   }
 
   addNode(type, position) {
     const nodeId = `node-${++this.nodeCounter}`;
     const nodeConfig = this.getNodeConfig(type);
     
-    // Convert screen coordinates to Cytoscape coordinates
-    const cyPosition = {
-      x: position.x - this.cy.width() / 2,
-      y: position.y - this.cy.height() / 2
-    };
-
+    // Use the provided position directly (already converted to Cytoscape coordinates)
     this.cy.add({
       group: 'nodes',
       data: {
@@ -192,7 +264,10 @@ class ContentWorkflowApp {
         borderColor: nodeConfig.borderColor,
         config: {}
       },
-      position: cyPosition
+      position: {
+        x: position.x,
+        y: position.y
+      }
     });
 
     // Auto-select the new node
@@ -200,6 +275,11 @@ class ContentWorkflowApp {
     this.selectNode(newNode);
     
     this.showToast('Node added successfully', 'success');
+    
+    // Update layout if this is the first node
+    if (this.cy.nodes().length === 1) {
+      this.cy.center(newNode);
+    }
   }
 
   getNodeConfig(type) {
@@ -540,14 +620,29 @@ class ContentWorkflowApp {
     button.disabled = true;
     
     try {
-      // Collect all node configurations
+      // Collect all node configurations and connections
       const nodes = this.cy.nodes().map(node => ({
         id: node.id(),
         type: node.data('type'),
-        config: node.data('config') || {}
+        config: node.data('config') || {},
+        position: node.position()
       }));
       
-      // Check if we have required input nodes
+      const edges = this.cy.edges().map(edge => ({
+        source: edge.source().id(),
+        target: edge.target().id(),
+        sourceType: edge.source().data('type'),
+        targetType: edge.target().data('type')
+      }));
+      
+      // Validate workflow structure
+      const validation = this.validateWorkflow(nodes, edges);
+      if (!validation.valid) {
+        this.showToast(validation.message, 'error');
+        return;
+      }
+      
+      // Check if we have required input nodes connected properly
       const hasBusinessBackground = nodes.some(n => n.type === 'business_background');
       const hasTargetAudience = nodes.some(n => n.type === 'target_audience');
       const hasStrategyGenerator = nodes.some(n => n.type === 'strategy_generator');
@@ -562,22 +657,19 @@ class ContentWorkflowApp {
         return;
       }
       
-      // Prepare parameters for AI generation
-      const businessNode = nodes.find(n => n.type === 'business_background');
-      const audienceNode = nodes.find(n => n.type === 'target_audience');
-      const objectivesNode = nodes.find(n => n.type === 'content_objectives');
-      const keywordsNode = nodes.find(n => n.type === 'keywords');
-      const formatNode = nodes.find(n => n.type === 'content_format');
+      // Check if strategy generator is connected to input nodes
+      const strategyGeneratorConnected = edges.some(edge => 
+        edge.targetType === 'strategy_generator' && 
+        (edge.sourceType === 'business_background' || edge.sourceType === 'target_audience')
+      );
       
-      const parameters = {
-        business_background: this.formatBusinessBackground(businessNode?.config || {}),
-        target_audience: this.formatTargetAudience(audienceNode?.config || {}),
-        content_objectives: this.formatContentObjectives(objectivesNode?.config || {}),
-        keywords: keywordsNode?.config?.primary_keywords || '',
-        content_format: formatNode?.config?.content_type || 'social_media',
-        brand_voice: 'Professional yet approachable',
-        industry: businessNode?.config?.industry || ''
-      };
+      if (!strategyGeneratorConnected) {
+        this.showToast('Please connect input nodes to Strategy Generator', 'error');
+        return;
+      }
+      
+      // Prepare parameters for AI generation by following node connections
+      const parameters = this.collectConnectedParameters(nodes, edges);
       
       // Generate strategies
       const response = await axios.post('/api/generate-strategies', {
@@ -595,6 +687,104 @@ class ContentWorkflowApp {
       button.classList.remove('loading');
       button.disabled = false;
     }
+  }
+
+  validateWorkflow(nodes, edges) {
+    // Check for isolated nodes that should be connected
+    const isolatedNodes = nodes.filter(node => {
+      const nodeEdges = edges.filter(edge => 
+        edge.source === node.id || edge.target === node.id
+      );
+      return nodeEdges.length === 0 && node.type !== 'export_hub';
+    });
+
+    if (isolatedNodes.length > 0 && nodes.length > 1) {
+      return {
+        valid: false,
+        message: `Isolated nodes found: ${isolatedNodes.map(n => n.type).join(', ')}. Please connect them to the workflow.`
+      };
+    }
+
+    // Check for valid workflow paths
+    const hasInputNodes = nodes.some(n => 
+      ['business_background', 'target_audience', 'content_objectives', 'keywords', 'content_format'].includes(n.type)
+    );
+
+    const hasProcessingNodes = nodes.some(n => 
+      ['strategy_generator', 'content_generator', 'content_refiner'].includes(n.type)
+    );
+
+    if (!hasInputNodes) {
+      return {
+        valid: false,
+        message: 'Please add at least one input node (Business Background, Target Audience, etc.)'
+      };
+    }
+
+    if (!hasProcessingNodes) {
+      return {
+        valid: false,
+        message: 'Please add at least one processing node (Strategy Generator, Content Generator, etc.)'
+      };
+    }
+
+    return { valid: true };
+  }
+
+  collectConnectedParameters(nodes, edges) {
+    const parameters = {
+      business_background: 'AI Content Creation Company specializing in innovative content solutions',
+      target_audience: 'Content creators, marketers, and business owners seeking AI-powered tools',
+      content_objectives: 'Increase engagement, drive conversions, and establish thought leadership',
+      keywords: 'AI content, automation, marketing, engagement',
+      content_format: 'social_media',
+      brand_voice: 'Professional yet approachable, innovative, solution-focused',
+      industry: 'Technology'
+    };
+
+    // Collect parameters from connected nodes
+    const connectedNodes = this.getConnectedInputNodes(edges);
+    
+    connectedNodes.forEach(nodeId => {
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) return;
+
+      const config = node.config || {};
+      
+      switch (node.type) {
+        case 'business_background':
+          parameters.business_background = this.formatBusinessBackground(config);
+          parameters.industry = config.industry || 'Technology';
+          break;
+        case 'target_audience':
+          parameters.target_audience = this.formatTargetAudience(config);
+          break;
+        case 'content_objectives':
+          parameters.content_objectives = this.formatContentObjectives(config);
+          break;
+        case 'keywords':
+          parameters.keywords = config.primary_keywords || 'content, marketing, AI';
+          break;
+        case 'content_format':
+          parameters.content_format = config.content_type || 'social_media';
+          break;
+      }
+    });
+
+    return parameters;
+  }
+
+  getConnectedInputNodes(edges) {
+    // Find all input nodes connected to processing nodes
+    const inputTypes = ['business_background', 'target_audience', 'content_objectives', 'keywords', 'content_format'];
+    const processingTypes = ['strategy_generator', 'content_generator', 'content_refiner'];
+    
+    return edges
+      .filter(edge => 
+        inputTypes.includes(edge.sourceType) && 
+        processingTypes.includes(edge.targetType)
+      )
+      .map(edge => edge.source);
   }
 
   formatBusinessBackground(config) {
@@ -1182,6 +1372,196 @@ class ContentWorkflowApp {
     a.href = imageUrl;
     a.download = filename;
     a.click();
+  }
+
+  startConnectionMode(sourceNode) {
+    this.connectionMode = true;
+    this.sourceNode = sourceNode;
+    
+    // Visual feedback
+    this.cy.nodes().removeClass('connecting');
+    sourceNode.addClass('connecting');
+    
+    // Update UI
+    this.showToast('Click on another node to create connection', 'warning');
+    document.body.style.cursor = 'crosshair';
+  }
+
+  exitConnectionMode() {
+    this.connectionMode = false;
+    this.sourceNode = null;
+    
+    // Remove visual feedback
+    this.cy.nodes().removeClass('connecting');
+    if (this.previewEdge) {
+      this.previewEdge.remove();
+      this.previewEdge = null;
+    }
+    
+    document.body.style.cursor = 'default';
+  }
+
+  createConnection(sourceNode, targetNode) {
+    if (sourceNode.id() === targetNode.id()) {
+      this.showToast('Cannot connect node to itself', 'error');
+      this.exitConnectionMode();
+      return;
+    }
+
+    // Check if connection already exists
+    const existingEdge = this.cy.edges().filter(edge => 
+      (edge.source().id() === sourceNode.id() && edge.target().id() === targetNode.id()) ||
+      (edge.source().id() === targetNode.id() && edge.target().id() === sourceNode.id())
+    );
+
+    if (existingEdge.length > 0) {
+      this.showToast('Connection already exists between these nodes', 'warning');
+      this.exitConnectionMode();
+      return;
+    }
+
+    // Validate connection logic
+    if (!this.isValidConnection(sourceNode.data('type'), targetNode.data('type'))) {
+      this.showToast('Invalid connection: Check node compatibility', 'error');
+      this.exitConnectionMode();
+      return;
+    }
+
+    // Create the edge
+    const edgeId = `edge-${sourceNode.id()}-${targetNode.id()}`;
+    this.cy.add({
+      group: 'edges',
+      data: {
+        id: edgeId,
+        source: sourceNode.id(),
+        target: targetNode.id()
+      }
+    });
+
+    this.showToast('Connection created successfully', 'success');
+    this.exitConnectionMode();
+  }
+
+  isValidConnection(sourceType, targetType) {
+    // Define valid connection patterns
+    const connectionRules = {
+      // Input nodes can connect to processing nodes
+      'business_background': ['strategy_generator', 'content_generator'],
+      'target_audience': ['strategy_generator', 'content_generator'],
+      'content_objectives': ['strategy_generator', 'content_generator'],
+      'keywords': ['strategy_generator', 'content_generator'],
+      'content_format': ['strategy_generator', 'content_generator'],
+      
+      // Processing nodes can connect to other processing or output nodes
+      'strategy_generator': ['content_generator', 'content_refiner', 'export_hub'],
+      'content_generator': ['content_refiner', 'image_generator', 'video_editor', 'export_hub'],
+      'content_refiner': ['export_hub', 'image_generator'],
+      
+      // Output nodes
+      'image_generator': ['export_hub'],
+      'video_editor': ['export_hub'],
+      'export_hub': [] // Terminal node
+    };
+
+    const validTargets = connectionRules[sourceType] || [];
+    return validTargets.includes(targetType);
+  }
+
+  updateConnectionPreview(position) {
+    if (!this.sourceNode || !this.connectionMode) return;
+
+    // Remove existing preview
+    if (this.previewEdge) {
+      this.previewEdge.remove();
+    }
+
+    // Create preview edge
+    const previewId = 'preview-edge';
+    this.cy.add({
+      group: 'edges',
+      data: {
+        id: previewId,
+        source: this.sourceNode.id(),
+        target: 'preview-target'
+      },
+      classes: 'preview'
+    });
+
+    // Add invisible target node for preview
+    this.cy.add({
+      group: 'nodes',
+      data: {
+        id: 'preview-target'
+      },
+      position: position,
+      style: {
+        'opacity': 0,
+        'width': 1,
+        'height': 1
+      }
+    });
+
+    this.previewEdge = this.cy.getElementById(previewId);
+  }
+
+  selectEdge(edge) {
+    this.cy.elements().removeClass('selected');
+    edge.addClass('selected');
+    this.showEdgeProperties(edge);
+  }
+
+  showEdgeProperties(edge) {
+    const sourceNode = edge.source();
+    const targetNode = edge.target();
+    
+    // Show connection info in properties panel
+    const defaultPanel = document.getElementById('default-panel');
+    const configPanel = document.getElementById('node-config-panel');
+    
+    defaultPanel.classList.add('hidden');
+    configPanel.classList.remove('hidden');
+    
+    const title = document.getElementById('node-title');
+    const description = document.getElementById('node-description');
+    const content = document.getElementById('node-config-content');
+    
+    title.textContent = 'Connection Properties';
+    description.textContent = `${sourceNode.data('label')} → ${targetNode.data('label')}`;
+    
+    content.innerHTML = `
+      <div class="space-y-4">
+        <div class="bg-blue-50 p-3 rounded">
+          <p class="text-sm text-blue-700">
+            <strong>Source:</strong> ${sourceNode.data('label')} (${sourceNode.data('type')})
+          </p>
+          <p class="text-sm text-blue-700">
+            <strong>Target:</strong> ${targetNode.data('label')} (${targetNode.data('type')})
+          </p>
+        </div>
+        
+        <div class="flex space-x-2">
+          <button class="btn btn-secondary flex-1" onclick="app.selectNode(app.cy.getElementById('${sourceNode.id()}'))">
+            <i class="fas fa-arrow-left mr-2"></i>Source Node
+          </button>
+          <button class="btn btn-secondary flex-1" onclick="app.selectNode(app.cy.getElementById('${targetNode.id()}'))">
+            <i class="fas fa-arrow-right mr-2"></i>Target Node
+          </button>
+        </div>
+        
+        <button class="btn btn-danger w-full" onclick="app.deleteConnection('${edge.id()}')">
+          <i class="fas fa-trash mr-2"></i>Delete Connection
+        </button>
+      </div>
+    `;
+  }
+
+  deleteConnection(edgeId) {
+    const edge = this.cy.getElementById(edgeId);
+    if (edge) {
+      edge.remove();
+      this.showToast('Connection deleted', 'success');
+      this.deselectNode(); // Clear properties panel
+    }
   }
 
   generatePDF(content, filename) {
